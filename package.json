@@ -8,7 +8,7 @@
     "start": "node dist/http.js"
   },
   "dependencies": {
-    "xmcp": "0.6.10",
+    "xmcp": "latest",
     "zod": "^3.23.8"
   },
   "devDependencies": {
