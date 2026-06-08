@@ -1,0 +1,21 @@
+{
+  "name": "auto-express-hub-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "xmcp dev",
+    "build": "xmcp build",
+    "start": "node dist/http.js"
+  },
+  "dependencies": {
+    "xmcp": "0.6.10",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
