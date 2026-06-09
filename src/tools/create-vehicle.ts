@@ -44,8 +44,9 @@ export const schema = {
     .describe("City or province where the vehicle is located (optional). E.g.: Cordoba, Buenos Aires, Mendoza"),
   fotos: z
     .array(z.string())
+    .max(20)
     .optional()
-    .describe("Array of photo filenames in .webp format (optional). E.g.: [\"photo1.webp\", \"photo2.webp\"]"),
+    .describe("Array of photo filenames in .webp format (optional, max 20). Get filenames by calling upload-vehicle-image first. E.g.: [\"photo1.webp\", \"photo2.webp\"]"),
   activo: z
     .boolean()
     .optional()

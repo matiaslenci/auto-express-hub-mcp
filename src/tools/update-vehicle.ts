@@ -30,7 +30,7 @@ export const schema = {
   color: z.string().optional().describe("Vehicle color (optional)"),
   descripcion: z.string().optional().describe("Vehicle description (optional)"),
   localidad: z.string().optional().describe("City or province (optional)"),
-  fotos: z.array(z.string()).optional().describe("Array of photo filenames .webp (optional)"),
+  fotos: z.array(z.string()).max(20).optional().describe("Array of photo filenames .webp (optional, max 20). Get filenames by calling upload-vehicle-image first."),
   activo: z.boolean().optional().describe("Whether the listing is active (optional)"),
 };
 
