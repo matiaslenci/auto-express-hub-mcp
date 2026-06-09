@@ -43,10 +43,19 @@ export const schema = {
     .optional()
     .describe("City or province where the vehicle is located (optional). E.g.: Cordoba, Buenos Aires, Mendoza"),
   fotos: z
-    .array(z.string())
+    .array(
+      z
+        .string()
+        .regex(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/i,
+          "Each filename must be a UUID returned by upload-vehicle-image, e.g. 'd2002bf6-2a4c-4e57-bf7a-7d2a742580cb.webp'. Do NOT invent filenames."
+        )
+    )
     .max(20)
     .optional()
-    .describe("Array of photo filenames in .webp format (optional, max 20). Get filenames by calling upload-vehicle-image first. E.g.: [\"photo1.webp\", \"photo2.webp\"]"),
+    .describe(
+      "Array of photo filenames (optional, max 20). Each filename MUST be a value previously returned by the upload-vehicle-image tool — they look like '<uuid>.webp'. NEVER fabricate or guess filenames; if the user hasn't uploaded photos through upload-vehicle-image, omit this field entirely."
+    ),
   activo: z
     .boolean()
     .optional()
@@ -56,7 +65,10 @@ export const schema = {
 export const metadata: ToolMetadata = {
   name: "create-vehicle",
   description:
-    "Create a new vehicle listing in Auto Express Hub. Use the vehicle-options resource to get valid values before calling this tool.",
+    "Create a new vehicle listing in Auto Express Hub. Use the vehicle-options resource to get valid values before calling this tool. " +
+    "IMPORTANT: the 'fotos' array only accepts filenames returned by the upload-vehicle-image tool (UUID format like 'd2002bf6-....webp'). " +
+    "If the user attached images but you have not yet called upload-vehicle-image for each one, do that FIRST and use the returned filenames. " +
+    "Never invent descriptive filenames such as 'auto_frente.webp' — those files do not exist on the server.",
   annotations: {
     title: "Create Vehicle Listing",
     readOnlyHint: false,
