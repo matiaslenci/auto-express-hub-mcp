@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { jwtVerify } from "jose";
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types";
 import { createOAuthRouter } from "./oauth-router";
 
 function getJwtSecret(): Uint8Array {
@@ -23,7 +24,17 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
     jwtVerify(token, getJwtSecret())
-      .then(() => next())
+      .then(({ payload }) => {
+        const backendJwt = payload["backendJwt"] as string | undefined;
+        (req as Request & { auth?: AuthInfo }).auth = {
+          token,
+          clientId: (payload["client_id"] as string) ?? "unknown",
+          scopes: [],
+          expiresAt: typeof payload.exp === "number" ? payload.exp : undefined,
+          extra: backendJwt ? { backendJwt } : {},
+        };
+        next();
+      })
       .catch(() => {
         // Fall back to API key check before rejecting
         if (req.headers["x-api-key"] === validKey) {
@@ -35,7 +46,7 @@ function authMiddleware(req: Request, res: Response, next: NextFunction): void {
     return;
   }
 
-  // x-api-key header (legacy — Claude Desktop)
+  // x-api-key header (legacy — Claude Desktop / dev)
   if (req.headers["x-api-key"] === validKey) {
     next();
     return;

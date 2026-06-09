@@ -1,9 +1,8 @@
 import { z } from "zod/v4";
-import { type InferSchema, type ToolMetadata } from "xmcp";
+import { type InferSchema, type ToolMetadata, type ToolExtraArguments } from "xmcp";
 import { createApiClient } from "../lib/api-client";
 
 export const schema = {
-  jwt: z.string().describe("JWT token of the agency that owns the vehicle"),
   vehicleId: z.string().uuid().describe("The vehicle's unique identifier (UUID)"),
   marca: z.string().optional().describe("Vehicle brand (optional)"),
   tipoVehiculo: z
@@ -60,13 +59,23 @@ export const metadata: ToolMetadata = {
   },
 };
 
-export default async function handler(args: InferSchema<typeof schema>) {
-  const { jwt, vehicleId, ...fields } = args;
+export default async function handler(
+  args: InferSchema<typeof schema>,
+  extra: ToolExtraArguments
+) {
+  const backendJwt = extra.authInfo?.extra?.backendJwt as string | undefined;
+  if (!backendJwt) {
+    return JSON.stringify({
+      success: false,
+      error: "Autenticación requerida. Conectá tu cuenta de Auto Express Hub desde la página de integración de Claude.",
+    });
+  }
+  const { vehicleId, ...fields } = args;
   try {
     const payload = Object.fromEntries(
       Object.entries(fields).filter(([, v]) => v !== undefined)
     );
-    const client = createApiClient({ jwt });
+    const client = createApiClient({ jwt: backendJwt });
     const vehicle = await client.patch(`/vehicles/${vehicleId}`, payload);
     return JSON.stringify({ success: true, vehicle });
   } catch (error) {

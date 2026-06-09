@@ -66,24 +66,26 @@ export function createOAuthRouter(): Router {
     body{font-family:system-ui,sans-serif;max-width:400px;margin:80px auto;padding:0 20px;color:#111}
     h1{font-size:1.3rem;margin-bottom:6px}
     p{color:#555;font-size:.95rem;margin-bottom:24px}
-    label{display:block;font-size:.9rem;font-weight:600;margin-bottom:6px}
-    input[type=password]{width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:1rem}
-    input[type=password]:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
-    button{margin-top:14px;width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer;font-weight:600}
+    label{display:block;font-size:.9rem;font-weight:600;margin-bottom:6px;margin-top:14px}
+    input[type=email],input[type=password]{width:100%;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:1rem}
+    input[type=email]:focus,input[type=password]:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+    button{margin-top:20px;width:100%;padding:12px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer;font-weight:600}
     button:hover{background:#1d4ed8}
   </style>
 </head>
 <body>
   <h1>Auto Express Hub MCP</h1>
-  <p>Ingresá tu API Key para autorizar el acceso desde Claude.ai.</p>
+  <p>Iniciá sesión con tu cuenta de Auto Express Hub para autorizar el acceso desde Claude.ai.</p>
   <form method="POST" action="/oauth/authorize">
     <input type="hidden" name="client_id"             value="${esc(q.client_id || "")}" />
     <input type="hidden" name="redirect_uri"          value="${esc(q.redirect_uri || "")}" />
     <input type="hidden" name="state"                 value="${esc(q.state || "")}" />
     <input type="hidden" name="code_challenge"        value="${esc(q.code_challenge || "")}" />
     <input type="hidden" name="code_challenge_method" value="${esc(q.code_challenge_method || "")}" />
-    <label for="api_key">API Key</label>
-    <input type="password" id="api_key" name="api_key" placeholder="tu_api_key" required autofocus />
+    <label for="email">Correo electrónico</label>
+    <input type="email" id="email" name="email" placeholder="agencia@ejemplo.com" required autofocus />
+    <label for="password">Contraseña</label>
+    <input type="password" id="password" name="password" placeholder="Tu contraseña" required />
     <button type="submit">Autorizar</button>
   </form>
 </body>
@@ -96,21 +98,44 @@ export function createOAuthRouter(): Router {
     urlencoded({ extended: false }),
     async (req: Request, res: Response) => {
       const b = req.body as Record<string, string>;
-      const validKey = process.env.MCP_API_KEY;
-
-      if (validKey && b.api_key !== validKey) {
-        res.status(401).send(`<!DOCTYPE html>
-<html lang="es"><head><meta charset="UTF-8"><title>Error</title>
-<style>body{font-family:system-ui,sans-serif;max-width:400px;margin:80px auto;padding:0 20px}</style>
-</head><body>
-<h2>API Key inválida</h2>
-<p>La clave ingresada no es correcta. <a href="javascript:history.back()">← Volver</a></p>
-</body></html>`);
-        return;
-      }
 
       if (!b.redirect_uri) {
         res.status(400).json({ error: "invalid_request" });
+        return;
+      }
+
+      const backendBase =
+        process.env.AUTO_EXPRESS_HUB_API_URL ?? "http://localhost:3000";
+
+      let backendJwt: string;
+      try {
+        const loginRes = await fetch(`${backendBase}/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: b.email, password: b.password }),
+        });
+
+        if (!loginRes.ok) {
+          res.status(401).send(`<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Error</title>
+<style>body{font-family:system-ui,sans-serif;max-width:400px;margin:80px auto;padding:0 20px}</style>
+</head><body>
+<h2>Credenciales inválidas</h2>
+<p>El email o la contraseña no son correctos. <a href="javascript:history.back()">← Volver</a></p>
+</body></html>`);
+          return;
+        }
+
+        const data = (await loginRes.json()) as { access_token: string };
+        backendJwt = data.access_token;
+      } catch {
+        res.status(502).send(`<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Error</title>
+<style>body{font-family:system-ui,sans-serif;max-width:400px;margin:80px auto;padding:0 20px}</style>
+</head><body>
+<h2>Error de conexión</h2>
+<p>No se pudo conectar con el servidor. Intentá de nuevo más tarde. <a href="javascript:history.back()">← Volver</a></p>
+</body></html>`);
         return;
       }
 
@@ -119,6 +144,7 @@ export function createOAuthRouter(): Router {
         client_id: b.client_id || null,
         code_challenge: b.code_challenge || null,
         code_challenge_method: b.code_challenge_method || null,
+        backendJwt,
       })
         .setProtectedHeader({ alg: "HS256" })
         .setIssuedAt()
@@ -194,20 +220,23 @@ export function createOAuthRouter(): Router {
           }
         }
 
-        // Issue access token
+        const backendJwt = payload["backendJwt"] as string | undefined;
+
+        // Issue access token with embedded backend JWT, TTL matches backend (14 days)
         const accessToken = await new SignJWT({
           sub: "mcp-client",
           client_id: payload["client_id"],
+          backendJwt,
         })
           .setProtectedHeader({ alg: "HS256" })
           .setIssuedAt()
-          .setExpirationTime("1h")
+          .setExpirationTime("14d")
           .sign(secret);
 
         res.json({
           access_token: accessToken,
           token_type: "Bearer",
-          expires_in: 3600,
+          expires_in: 14 * 24 * 3600,
         });
       } catch {
         res.status(400).json({ error: "invalid_grant", error_description: "Invalid or expired code" });
