@@ -5,6 +5,12 @@ const BASE_URL = process.env.AUTO_EXPRESS_HUB_API_URL ?? "http://localhost:3000"
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_PHOTOS_PER_VEHICLE = 20;
 
+const EXT_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
 export const schema = {
   jwt: z
     .string()
@@ -16,8 +22,10 @@ export const schema = {
       "The image file content encoded as base64. The 'data:<mime>;base64,' prefix is accepted but optional. Decoded size must be <= 10 MB."
     ),
   mimeType: z
-    .enum(["image/jpeg", "image/png", "image/webp"])
-    .describe("MIME type of the source image. The backend re-encodes everything to .webp."),
+    .string()
+    .describe(
+      "MIME type of the source image. Must be one of: image/jpeg, image/png, image/webp. The backend re-encodes everything to .webp."
+    ),
 };
 
 export const metadata: ToolMetadata = {
@@ -36,12 +44,20 @@ export const metadata: ToolMetadata = {
   },
 };
 
-export default async function handler({
-  jwt,
-  imageBase64,
-  mimeType,
-}: InferSchema<typeof schema>) {
+export default async function handler(args: InferSchema<typeof schema>) {
+  const jwt = String(args.jwt);
+  const imageBase64 = String(args.imageBase64);
+  const mimeType = String(args.mimeType);
+
   try {
+    const ext = EXT_BY_MIME[mimeType];
+    if (!ext) {
+      return JSON.stringify({
+        success: false,
+        error: `Invalid mimeType "${mimeType}". Allowed: image/jpeg, image/png, image/webp.`,
+      });
+    }
+
     const cleaned = imageBase64.replace(/^data:[^;]+;base64,/, "");
     const buffer = Buffer.from(cleaned, "base64");
 
@@ -60,7 +76,6 @@ export default async function handler({
       });
     }
 
-    const ext = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1];
     const form = new FormData();
     form.append("file", new Blob([buffer], { type: mimeType }), `upload.${ext}`);
 
